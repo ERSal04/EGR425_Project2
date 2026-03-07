@@ -2,12 +2,12 @@
 #include <M5Core2.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
-#include <NTPClient.h>
 // #include "EGR425_Phase1_weather_bitmap_images.h"
-#include "WiFi.h"
+#include <WiFi.h>
 #include "config.h"
 #include "timestamp.h"
 #include "layout.h"
+#include "SensorSuite.h"
 
 // ===============================================
 // THIS IS THE IN CLASS LAB FILE
@@ -21,8 +21,8 @@ String urlOpenWeather = "https://api.openweathermap.org/data/2.5/weather?";
 String apiKey = OPENWEATHER_API_KEY;
 
 // TODO 1: WiFi variables
-String wifiNetworkName = "CBU-LANCERS";
-String wifiPassword = "L@ncerN@tion";
+String wifiNetworkName = WIFI_SSID;
+String wifiPassword = WIFI_PASSWORD;
 
 // Time variables
 unsigned long lastTime = 0;
@@ -38,6 +38,8 @@ String lastZipCode = "00000";
 // Units Variable
 String tempUnit = "imperial";
 String tempChar = "F";
+SensorSuite sensorSuite;
+bool sensorsReady = false;
 
 // LCD variables
 // int sWidth;
@@ -64,6 +66,7 @@ void setup()
     displayZipcodeInput();
 
     getScreenMetrics();
+    sensorsReady = sensorSuite.begin(true, false);
 
     // TODO 2: Connect to WiFi (this can take several seconds)
     WiFi.begin(wifiNetworkName.c_str(), wifiPassword.c_str());
@@ -192,6 +195,9 @@ void loop()
             uint16_t primaryTextColor;
             // Draws the Weather details with a gradient and prints the last time it was updated
             drawGradientStyle(tempNow, tempMin, tempMax, cityName, strWeatherDesc, strWeatherIcon, primaryTextColor, tempChar);
+
+            SensorReadings sensorReadings = sensorSuite.read(false);
+            drawSensorPanel(sensorsReady && sensorReadings.valid, sensorReadings.proximityRaw, sensorReadings.lightLux);
 
         }
         else

@@ -12,5 +12,6 @@ extern int sWidth;
 void drawGradientStyle(double tempNow, double tempMin, double tempMax, String cityName, String weatherDesc, String iconId, uint16_t primaryTextColor, String tempChar);
 void getScreenMetrics();
 void drawWeatherImage(String iconId, int resizeMult);
+void drawSensorPanel(bool sensorsReady, uint16_t proximityRaw, float lightLux);
 
 #endif

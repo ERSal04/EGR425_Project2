@@ -106,3 +106,32 @@ void drawWeatherImage(String iconId, int resizeMult)
         }
     }
 }
+
+void drawSensorPanel(bool sensorsReady, uint16_t proximityRaw, float lightLux) {
+    int panelW = 135;
+    int panelH = 62;
+    int panelX = sWidth - panelW - 8;
+    int panelY = 8;
+
+    M5.Lcd.fillRoundRect(panelX, panelY, panelW, panelH, 8, TFT_BLACK);
+    M5.Lcd.drawRoundRect(panelX, panelY, panelW, panelH, 8, TFT_WHITE);
+
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setTextColor(TFT_WHITE);
+    M5.Lcd.setCursor(panelX + 8, panelY + 7);
+    M5.Lcd.print("Sensors");
+
+    M5.Lcd.setCursor(panelX + 8, panelY + 24);
+    if (sensorsReady) {
+        M5.Lcd.printf("Prox: %u", proximityRaw);
+    } else {
+        M5.Lcd.print("Prox: N/A");
+    }
+
+    M5.Lcd.setCursor(panelX + 8, panelY + 40);
+    if (sensorsReady && lightLux >= 0.0f) {
+        M5.Lcd.printf("Lux: %.1f", lightLux);
+    } else {
+        M5.Lcd.print("Lux: N/A");
+    }
+}
