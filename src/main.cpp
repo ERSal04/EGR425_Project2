@@ -1,3 +1,4 @@
+// EGR 425 Project 2: Sensors and weather app
 #include <M5Core2.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
