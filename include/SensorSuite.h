@@ -32,8 +32,8 @@ private:
 
     static constexpr int DEFAULT_I2C_ADDRESS = 0x60;
     static constexpr int DEFAULT_I2C_FREQ = 100000;
-    static constexpr int DEFAULT_SDA_PIN = 21;
-    static constexpr int DEFAULT_SCL_PIN = 22;
+    static constexpr int DEFAULT_SDA_PIN = 32;
+    static constexpr int DEFAULT_SCL_PIN = 33;
 };
 
 #endif

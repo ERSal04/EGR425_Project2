@@ -46,6 +46,11 @@ unsigned long sensorDelay = 5000;
 float lastDisplayedTemp = -999;
 float lastDisplayedHumidity = -999;
 
+// Proximity / brightness control
+bool screenIsOn = true;
+uint16_t PROXIMITY_THRESHOLD = 300; // tune this after testing
+int currentBrightness = 200;
+
 ////////////////////////////////////////////////////////////////////
 // Method header declarations
 ////////////////////////////////////////////////////////////////////
@@ -53,6 +58,8 @@ String httpGETRequest(const char *serverName);
 String getZipcodeString();
 void displayZipcodeInput();
 void handleZipcodeInput();
+void redrawCurrentScreen(); 
+void setScreenBrightness(int brightness); 
 
 ///////////////////////////////////////////////////////////////
 // Put your setup code here, to run once
@@ -85,6 +92,59 @@ void setup()
     displayZipcodeInput();
 }
 
+void updateScreenHardware(SensorReadings &r) {
+    if (!sensorsReady || !r.valid) return;
+
+    bool objectClose = (r.proximityRaw > PROXIMITY_THRESHOLD);
+
+    if (objectClose && screenIsOn) {
+        screenIsOn = false;
+        setScreenBrightness(0);
+        M5.Lcd.sleep();
+        Serial.printf("Screen OFF (prox=%u)\n", r.proximityRaw);
+    }
+    else if (!objectClose && !screenIsOn) {
+        screenIsOn = true;
+        M5.Lcd.wakeup();
+        setScreenBrightness(currentBrightness);
+        redrawCurrentScreen();
+        Serial.printf("Screen ON (prox=%u)\n", r.proximityRaw);
+    }
+
+    if (screenIsOn) {
+        float lux = constrain(r.lightLux, 0.0f, 1000.0f);
+        int targetBrightness = (int)map((long)lux, 0, 1000, 30, 200);
+
+        if (abs(targetBrightness - currentBrightness) > 5) {
+            currentBrightness = targetBrightness;
+            setScreenBrightness(currentBrightness);
+            Serial.printf("Brightness: %d (lux=%.1f)\n", currentBrightness, r.lightLux);
+        }
+    }
+}
+
+void redrawCurrentScreen() {
+    if (currentScreen == SCREEN_ZIPCODE) {
+        displayZipcodeInput();
+    }
+    else if (currentScreen == SCREEN_WEATHER) {
+        lastTime = 0; // force immediate weather refresh
+    }
+    else if (currentScreen == SCREEN_LOCAL) {
+        lastDisplayedTemp = -999; // force immediate sensor redraw
+        lastSensorTime = 0;
+    }
+}
+
+void setScreenBrightness(int brightness) {
+    // Core2 backlight is controlled via AXP192 LCD voltage
+    // Range: 2500mV (off/dim) to 3300mV (full bright)
+    brightness = constrain(brightness, 0, 200);
+    uint16_t voltage = map(brightness, 0, 200, 2500, 3300);
+    M5.Axp.SetLcdVoltage(voltage);
+    Serial.printf("LCD Voltage: %dmV (brightness=%d)\n", voltage, brightness);
+}
+
 ///////////////////////////////////////////////////////////////
 // Put your main code here, to run repeatedly
 ///////////////////////////////////////////////////////////////
@@ -101,6 +161,16 @@ void loop()
         }
         return;
     }
+
+    static unsigned long lastSensorRead = 0;
+    static SensorReadings r;
+
+    if (millis() - lastSensorRead > 100) {
+        lastSensorRead = millis();
+        r = sensorSuite.read(false);
+        updateScreenHardware(r);
+    }
+
 
     // ── SCREEN: LOCAL SENSOR ─────────────────────────────────
     if (currentScreen == SCREEN_LOCAL) {
@@ -125,7 +195,6 @@ void loop()
             lastSensorTime = millis();
             updateTime();
 
-            SensorReadings r = sensorSuite.read(false);
             float displayTemp = (tempChar == "F")
                 ? (r.tempC * 9.0f / 5.0f + 32.0f)
                 : r.tempC;
@@ -191,7 +260,6 @@ void loop()
             uint16_t primaryTextColor;
             drawGradientStyle(tempNow, tempMin, tempMax, cityName, strWeatherDesc, strWeatherIcon, primaryTextColor, tempChar);
 
-            SensorReadings r = sensorSuite.read(false);
             drawSensorPanel(sensorsReady && r.valid, r.proximityRaw, r.lightLux);
         } else {
             Serial.println("WiFi Disconnected");
