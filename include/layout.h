@@ -13,5 +13,6 @@ void drawGradientStyle(double tempNow, double tempMin, double tempMax, String ci
 void getScreenMetrics();
 void drawWeatherImage(String iconId, int resizeMult);
 void drawSensorPanel(bool sensorsReady, uint16_t proximityRaw, float lightLux);
+void drawLocalSensorScreen(float tempC, float humidity, String tempChar, bool sht40Valid); // ADD
 
 #endif

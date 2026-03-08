@@ -2,16 +2,11 @@
 #include <M5Core2.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
-// #include "EGR425_Phase1_weather_bitmap_images.h"
 #include <WiFi.h>
 #include "config.h"
 #include "timestamp.h"
 #include "layout.h"
 #include "SensorSuite.h"
-
-// ===============================================
-// THIS IS THE IN CLASS LAB FILE
-// ===============================================
 
 ////////////////////////////////////////////////////////////////////
 // Variables
@@ -41,15 +36,20 @@ String tempChar = "F";
 SensorSuite sensorSuite;
 bool sensorsReady = false;
 
-// LCD variables
-// int sWidth;
-// int sHeight;
+// Screen state
+enum Screen { SCREEN_ZIPCODE, SCREEN_WEATHER, SCREEN_LOCAL };
+Screen currentScreen = SCREEN_ZIPCODE;
+
+// Local sensor update timing
+unsigned long lastSensorTime = 0;
+unsigned long sensorDelay = 5000;
+float lastDisplayedTemp = -999;
+float lastDisplayedHumidity = -999;
 
 ////////////////////////////////////////////////////////////////////
 // Method header declarations
 ////////////////////////////////////////////////////////////////////
 String httpGETRequest(const char *serverName);
-// void drawWeatherImage(String iconId, int resizeMult);
 String getZipcodeString();
 void displayZipcodeInput();
 void handleZipcodeInput();
@@ -92,123 +92,112 @@ void loop()
 {
     M5.update();
 
-    // Handle zipcode input mode
-    if (zipcodeMode)
-    {
-        handleZipcodeInput();
-
-        return; // Don't execute weather code yet
-    }
-
-    if (M5.BtnB.wasPressed()) {
-                if (tempUnit == "imperial") {
-                    tempUnit = "metric";
-                    tempChar = "C";
-                    Serial.printf("Changing units to Metric. Char: %s", tempChar.c_str());
-                } else {
-                    tempUnit = "imperial";
-                    tempChar = "F";
-                    Serial.printf("Changing units to Imperial. Char: %s", tempChar.c_str());
-                }
-                lastTime = 0;
-            }
-
-    if (M5.BtnC.wasPressed()) {
-        // Pre-populate the digit array with the last used zipcode
-        for (int i = 0; i < 5; i++) {
-            zipcode[i] = lastZipCode[i] - '0'; // Convert char to int
+    // ── SCREEN: ZIPCODE ──────────────────────────────────────
+    if (currentScreen == SCREEN_ZIPCODE) {
+        handleZipcodeInput(); // internally sets zipcodeMode=false when done
+        if (!zipcodeMode) {
+            currentScreen = SCREEN_WEATHER;
+            lastTime = 0;
         }
-        currentDigit = 0;
-        zipcodeMode = true;
-        displayZipcodeInput();
+        return;
     }
 
-    // Only execute every so often
-    if ((millis() - lastTime) > timerDelay)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
+    // ── SCREEN: LOCAL SENSOR ─────────────────────────────────
+    if (currentScreen == SCREEN_LOCAL) {
+        // Btn A: back to weather
+        if (M5.BtnA.wasPressed()) {
+            currentScreen = SCREEN_WEATHER;
+            lastTime = 0; // force weather redraw
+            lastDisplayedTemp = -999;
+            lastDisplayedHumidity = -999;
+            return;
+        }
+
+        // Btn B: toggle units
+        if (M5.BtnB.wasPressed()) {
+            if (tempUnit == "imperial") { tempUnit = "metric";  tempChar = "C"; }
+            else                        { tempUnit = "imperial"; tempChar = "F"; }
+            lastDisplayedTemp = -999; // force redraw
+        }
+
+        // Update every 5s, only redraw if values changed
+        if ((millis() - lastSensorTime) > sensorDelay) {
+            lastSensorTime = millis();
             updateTime();
 
-            //////////////////////////////////////////////////////////////////
-            // TODO 4: Hardcode the specific city,state,country into the query
-            // Examples: https://api.openweathermap.org/data/2.5/weather?q=riverside,ca,usa&units=imperial&appid=YOUR_API_KEY
-            // https://api.openweathermap.org/data/2.5/weather?q=london&units=imperial&appid=YOUR_API_KEY
-            // https://api.openweathermap.org/data/2.5/weather?q=chino,ca,usa&units=imperial&appid=YOUR_API_KEY
-            // https://api.openweathermap.org/data/2.5/weather?q=washington,dc,usa&units=imperial&appid=YOUR_API_KEY
-            // https://api.openweathermap.org/data/2.5/weather?q=tokyo,jp&units=imperial&appid=YOUR_API_KEY
-            //////////////////////////////////////////////////////////////////
-            // String serverURL = urlOpenWeather + "q=tokyo,jp&units=imperial&appId=" + apiKey;
+            SensorReadings r = sensorSuite.read(false);
+            float displayTemp = (tempChar == "F")
+                ? (r.tempC * 9.0f / 5.0f + 32.0f)
+                : r.tempC;
+
+            // Only redraw if values changed meaningfully
+            if (abs(displayTemp - lastDisplayedTemp) > 0.05f ||
+                abs(r.humidity - lastDisplayedHumidity) > 0.1f) {
+                lastDisplayedTemp     = displayTemp;
+                lastDisplayedHumidity = r.humidity;
+                drawLocalSensorScreen(r.tempC, r.humidity, tempChar, r.sht40Valid);
+            }
+        }
+        return;
+    }
+
+    // ── SCREEN: WEATHER ───────────────────────────────────────
+    // Btn A: go to local sensor screen
+    if (M5.BtnA.wasPressed()) {
+        currentScreen = SCREEN_LOCAL;
+        lastSensorTime = 0; // force immediate sensor read
+        lastDisplayedTemp = -999;
+        return;
+    }
+
+    // Btn B: toggle units
+    if (M5.BtnB.wasPressed()) {
+        if (tempUnit == "imperial") { tempUnit = "metric";  tempChar = "C"; }
+        else                        { tempUnit = "imperial"; tempChar = "F"; }
+        lastTime = 0;
+    }
+
+    // Btn C: back to zipcode
+    if (M5.BtnC.wasPressed()) {
+        for (int i = 0; i < 5; i++) zipcode[i] = lastZipCode[i] - '0';
+        currentDigit = 0;
+        zipcodeMode = true;
+        currentScreen = SCREEN_ZIPCODE;
+        displayZipcodeInput();
+        return;
+    }
+
+    // Weather fetch every timerDelay ms
+    if ((millis() - lastTime) > timerDelay) {
+        if (WiFi.status() == WL_CONNECTED) {
+            updateTime();
             String serverURL = urlOpenWeather + "zip=" + zipcodeString + ",us&units=" + tempUnit + "&appId=" + apiKey;
-            Serial.println(serverURL); // Debug print
-
-            //////////////////////////////////////////////////////////////////
-            // TODO 5: Make GET request and store reponse
-            //////////////////////////////////////////////////////////////////
             String response = httpGETRequest(serverURL.c_str());
-            Serial.print(response); // Debug print
 
-            //////////////////////////////////////////////////////////////////
-            // TODO 6: Import ArduinoLibrary and then use arduinojson.org/v6/assistant to
-            // compute the proper capacity (this is a weird library thing) and initialize
-            // the json object
-            //////////////////////////////////////////////////////////////////
             JsonDocument objResponse;
-
-            //////////////////////////////////////////////////////////////////
-            // TODO 7: (uncomment) Deserialize the JSON document and test if parsing succeeded
-            //////////////////////////////////////////////////////////////////
             DeserializationError error = deserializeJson(objResponse, response);
-            if (error)
-            {
-                Serial.print(F("deserializeJson() failed: "));
-                Serial.println(error.f_str());
+            if (error) {
+                Serial.printf("deserializeJson() failed: %s\n", error.f_str());
                 return;
             }
-            serializeJsonPretty(objResponse, Serial); // Debug print
 
-            //////////////////////////////////////////////////////////////////
-            // TODO 8: Parse Response to get the weather description and icon
-            //////////////////////////////////////////////////////////////////
             String strWeatherDesc = objResponse["weather"][0]["description"].as<String>();
             String strWeatherIcon = objResponse["weather"][0]["icon"].as<String>();
             String cityName = objResponse["name"].as<String>();
-
-            // TODO 9: Parse response to get the temperatures
             double tempNow = objResponse["main"]["temp"].as<double>();
             double tempMin = objResponse["main"]["temp_min"].as<double>();
             double tempMax = objResponse["main"]["temp_max"].as<double>();
 
-            Serial.printf("NOW: %.1f F and %s\tMIN: %.1f F\tMax: %.1f F\n", tempNow, strWeatherDesc, tempMin, tempMax);
-
-            //////////////////////////////////////////////////////////////////
-            // TODO 10: We can download the image directly, but there is no easy
-            // way to work with a PNG file on the ESP32 (in Arduino) so we will
-            // take another route - see EGR425_Phase1_weather_bitmap_images.h
-            // for more details
-            //////////////////////////////////////////////////////////////////
-            String imagePath = "http://openweathermap.org/img/wn/" + strWeatherIcon + "@2x.png";
-            Serial.println(imagePath);
-            response = httpGETRequest(imagePath.c_str());
-            Serial.print(response); 
-
             uint16_t primaryTextColor;
-            // Draws the Weather details with a gradient and prints the last time it was updated
             drawGradientStyle(tempNow, tempMin, tempMax, cityName, strWeatherDesc, strWeatherIcon, primaryTextColor, tempChar);
 
-            SensorReadings sensorReadings = sensorSuite.read(false);
-            drawSensorPanel(sensorsReady && sensorReadings.valid, sensorReadings.proximityRaw, sensorReadings.lightLux);
-
-        }
-        else
-        {
+            SensorReadings r = sensorSuite.read(false);
+            drawSensorPanel(sensorsReady && r.valid, r.proximityRaw, r.lightLux);
+        } else {
             Serial.println("WiFi Disconnected");
         }
-
-        // Update the last time to NOW
         lastTime = millis();
     }
-    // delay(100);
 }
 
 /////////////////////////////////////////////////////////////////

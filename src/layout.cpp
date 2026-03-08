@@ -135,3 +135,69 @@ void drawSensorPanel(bool sensorsReady, uint16_t proximityRaw, float lightLux) {
         M5.Lcd.print("Lux: N/A");
     }
 }
+
+void drawLocalSensorScreen(float tempC, float humidity, String tempChar, bool sht40Valid) {
+    // Dark teal gradient background
+    for (int y = 0; y < sHeight; y++) {
+        int g = map(y, 0, sHeight, 60, 20);
+        int b = map(y, 0, sHeight, 80, 40);
+        M5.Lcd.drawFastHLine(0, y, sWidth, M5.Lcd.color565(0, g, b));
+    }
+
+    // Title bar
+    M5.Lcd.fillRoundRect(10, 8, sWidth - 20, 30, 6, TFT_DARKCYAN);
+    M5.Lcd.setTextSize(2);
+    M5.Lcd.setTextColor(TFT_WHITE);
+    M5.Lcd.setCursor(20, 14);
+    M5.Lcd.print("LOCAL SENSOR  [LIVE]");
+
+    if (!sht40Valid) {
+        M5.Lcd.setTextSize(2);
+        M5.Lcd.setTextColor(TFT_RED);
+        M5.Lcd.setCursor(40, 100);
+        M5.Lcd.print("SHT40 Not Found");
+        M5.Lcd.setCursor(40, 130);
+        M5.Lcd.print("Check wiring");
+        return;
+    }
+
+    // Convert if needed
+    float displayTemp = (tempChar == "F") ? (tempC * 9.0f / 5.0f + 32.0f) : tempC;
+
+    // Temperature block
+    M5.Lcd.fillRoundRect(10, 48, sWidth - 20, 85, 8, TFT_BLACK);
+    M5.Lcd.drawRoundRect(10, 48, sWidth - 20, 85, 8, TFT_CYAN);
+
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setTextColor(TFT_CYAN);
+    M5.Lcd.setCursor(22, 56);
+    M5.Lcd.print("TEMPERATURE");
+
+    M5.Lcd.setTextSize(6);
+    M5.Lcd.setTextColor(TFT_WHITE);
+    M5.Lcd.setCursor(22, 72);
+    M5.Lcd.printf("%.1f%s", displayTemp, tempChar == "F" ? "F" : "C");
+
+    // Humidity block
+    M5.Lcd.fillRoundRect(10, 143, sWidth - 20, 85, 8, TFT_BLACK);
+    M5.Lcd.drawRoundRect(10, 143, sWidth - 20, 85, 8, TFT_MAGENTA);
+
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setTextColor(TFT_MAGENTA);
+    M5.Lcd.setCursor(22, 151);
+    M5.Lcd.print("HUMIDITY");
+
+    M5.Lcd.setTextSize(6);
+    M5.Lcd.setTextColor(TFT_WHITE);
+    M5.Lcd.setCursor(22, 167);
+    M5.Lcd.printf("%.1f%%", humidity);
+
+    // Timestamp at bottom
+    drawTimeStamp(20, sHeight - 20, TFT_LIGHTGREY);
+
+    // Button hint
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setTextColor(TFT_DARKGREY);
+    M5.Lcd.setCursor(sWidth - 100, sHeight - 20);
+    M5.Lcd.print("B:units");
+}

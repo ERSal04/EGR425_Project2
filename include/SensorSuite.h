@@ -4,11 +4,15 @@
 #include <Arduino.h>
 #include "LightSensor.h"
 #include "ProximitySensor.h"
+#include "SHT40.h" 
 
 struct SensorReadings {
     uint16_t proximityRaw;
     uint16_t lightRaw;
     float lightLux;
+    float    tempC;                 
+    float    humidity;              
+    bool     sht40Valid;
     bool valid;
 };
 
@@ -21,7 +25,10 @@ public:
 private:
     ProximitySensor proximitySensor;
     LightSensor lightSensor;
-    bool ready = false;
+    SHT40 sht40;
+    bool ready   = false;
+    bool sht40Ok = false;
+
 
     static constexpr int DEFAULT_I2C_ADDRESS = 0x60;
     static constexpr int DEFAULT_I2C_FREQ = 100000;
